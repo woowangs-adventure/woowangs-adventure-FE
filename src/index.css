@@ -1,0 +1,59 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #F4F7FB;
+  --color-card: #FFFFFF;
+  --color-card-secondary: #F8FAFC;
+  --color-text-primary: #172033;
+  --color-text-secondary: #64748B;
+  --color-border: #D8E1EB;
+  --color-blue: #2563EB;
+  --color-cyan: #0891B2;
+  --color-green: #16A34A;
+  --color-amber: #F59E0B;
+  --color-orange: #EA580C;
+  --color-red: #DC2626;
+  --color-selected-bg: #EFF6FF;
+  --font-sans: 'Pretendard', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #F4F7FB;
+  font-family: 'Pretendard', 'Inter', system-ui, sans-serif;
+  color: #172033;
+  font-feature-settings: 'tnum';
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D8E1EB; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabnum {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+}
+
+/* Map pixel-perfect rendering */
+.slam-map-img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
