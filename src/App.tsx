@@ -13,6 +13,7 @@ import mapImage from '@/imports/image.png'
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 type Theme = 'light' | 'dark'
+type ControlTarget = 'turtlebot' | 'mini'
 
 interface Crack {
   id: string
@@ -43,9 +44,9 @@ const CRACKS: Crack[] = [
 
 const STATUS = [
   { label: '로봇', detail: '정상', tone: 'ok' },
-  { label: '영상', detail: '지연 320ms', tone: 'warn' },
-  { label: '카메라', detail: '정상', tone: 'ok' },
-  { label: 'LiDAR', detail: '정상', tone: 'ok' },
+  { label: '미니 영상', detail: '지연 320ms', tone: 'warn' },
+  { label: '미니 카메라', detail: '정상', tone: 'ok' },
+  { label: 'TB3 LiDAR', detail: '정상', tone: 'ok' },
   { label: 'SLAM', detail: '정상', tone: 'ok' },
   { label: 'YOLO 탐지', detail: '지연 84ms', tone: 'ok' },
   { label: '미니로봇', detail: '정상', tone: 'ok' },
@@ -162,6 +163,7 @@ export default function App() {
   })
   const [emergency, setEmergency] = useState(false)
   const [controlActive, setControlActive] = useState(false)
+  const [controlTarget, setControlTarget] = useState<ControlTarget>('mini')
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set())
   const [speed, setSpeed] = useState(50)
   const [zoom, setZoom] = useState(1)
@@ -200,6 +202,13 @@ export default function App() {
 
   const keyActive = (key: string) => activeKeys.has(key) || activeKeys.has(`arrow${key === 'w' ? 'up' : key === 's' ? 'down' : key === 'a' ? 'left' : 'right'}`)
   const highRisk = CRACKS.filter((crack) => crack.risk === 'high' || crack.risk === 'critical').length
+  const controlTargetLabel = controlTarget === 'mini' ? '미니로봇' : 'TurtleBot3'
+
+  const changeControlTarget = (target: ControlTarget) => {
+    setActiveKeys(new Set())
+    setControlActive(false)
+    setControlTarget(target)
+  }
 
   return (
     <div className="app-shell">
@@ -219,12 +228,12 @@ export default function App() {
 
       <main className="dashboard">
         <div className="monitor-grid">
-          <Panel title="실시간 카메라" className="camera-panel" actions={<><span className="stream-state"><i/>연결 대기</span><Button className="desktop-only"><Icon name="download" size={14}/>스냅샷</Button><Button className="desktop-only"><Icon name="expand" size={14}/>전체 화면</Button></>}>
+          <Panel title="미니로봇 실시간 카메라" className="camera-panel" actions={<><span className="source-chip">MINI-01</span><span className="stream-state"><i/>연결 대기</span><Button className="desktop-only"><Icon name="download" size={14}/>스냅샷</Button><Button className="desktop-only"><Icon name="expand" size={14}/>전체 화면</Button></>}>
             <div className="camera-frame"><div className="camera-empty"><span><Icon name="camera" size={30}/></span><b>실시간 영상 영역</b><p>WebRTC 영상 연결 후 실시간 화면이 표시됩니다.</p></div><small>16:9 영상 영역</small></div>
             <div className="camera-meta"><span><small>해상도</small><b className="mono">640×480</b></span><span><small>FPS</small><b className="mono">30fps</b></span><span><small>영상 지연</small><b className="mono warning-text">320ms</b></span><span><small>마지막 프레임</small><b className="mono">—</b></span></div>
           </Panel>
 
-          <Panel title="SLAM 지도" className="map-panel" actions={<><button className="icon-button compact" onClick={() => setZoom(Math.min(1.5, zoom + .1))} aria-label="지도 확대"><Icon name="plus" size={15}/></button><button className="icon-button compact" onClick={() => setZoom(Math.max(.8, zoom - .1))} aria-label="지도 축소"><Icon name="minus" size={15}/></button></>}>
+          <Panel title="TurtleBot3 SLAM 지도" className="map-panel" actions={<><span className="source-chip">LiDAR</span><button className="icon-button compact" onClick={() => setZoom(Math.min(1.5, zoom + .1))} aria-label="지도 확대"><Icon name="plus" size={15}/></button><button className="icon-button compact" onClick={() => setZoom(Math.max(.8, zoom - .1))} aria-label="지도 축소"><Icon name="minus" size={15}/></button></>}>
             <div className="map-frame">
               <div className="map-canvas" style={{ transform: `scale(${zoom})` }}>
                 <img className="slam-map-img" src={mapImage} alt="LiDAR로 생성한 지하공간 SLAM 지도"/>
@@ -238,13 +247,17 @@ export default function App() {
 
         <div className="operations-grid">
           <div className="control-stack">
-            <Panel title="미니로봇 조작" className="mini-control" actions={<button className={`control-toggle ${controlActive ? 'active' : ''}`} disabled={emergency} onClick={() => setControlActive(!controlActive)}><i/>{controlActive ? '조종 활성' : '조종 활성화'}</button>}>
+            <Panel title="로봇 수동 조작" className="mini-control" actions={<button className={`control-toggle ${controlActive ? 'active' : ''}`} disabled={emergency} onClick={() => setControlActive(!controlActive)}><i/>{controlActive ? `${controlTargetLabel} 조종 중` : '조종 활성화'}</button>}>
+              <div className="robot-selector" aria-label="키보드 제어 대상">
+                <button className={controlTarget === 'mini' ? 'active' : ''} onClick={() => changeControlTarget('mini')}><Icon name="camera" size={12}/><span>미니로봇</span><small>카메라</small></button>
+                <button className={controlTarget === 'turtlebot' ? 'active' : ''} onClick={() => changeControlTarget('turtlebot')}><Icon name="map" size={12}/><span>TurtleBot3</span><small>LiDAR · SLAM</small></button>
+              </div>
               <div className="drive-row">
                 <div className="keypad"><span/><button className={keyActive('w') ? 'pressed' : ''}>W</button><span/><button className={keyActive('a') ? 'pressed' : ''}>A</button><button className={activeKeys.has(' ') ? 'pressed stop-key' : 'stop-key'}>SPC</button><button className={keyActive('d') ? 'pressed' : ''}>D</button><span/><button className={keyActive('s') ? 'pressed' : ''}>S</button><span/></div>
                 <div className="drive-info"><p><span>W / ↑</span> 전진 · <span>S / ↓</span> 후진</p><p><span>A / ←</span> 좌회전 · <span>D / →</span> 우회전</p><p><span>Space</span> 즉시 정지</p></div>
               </div>
               <div className="speed-row"><label htmlFor="speed">속도 <b>{speed}%</b></label><input id="speed" type="range" min="0" max="100" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}/></div>
-              <div className="telemetry"><span>방향 <b>정지</b></span><span>좌 모터 <b>0%</b></span><span>우 모터 <b>0%</b></span><span>지연 <b>84ms</b></span></div>
+              <div className="telemetry"><span>대상 <b>{controlTargetLabel}</b></span><span>명령 <b>정지</b></span><span>속도 <b>{speed}%</b></span><span>지연 <b>84ms</b></span></div>
             </Panel>
 
             <Panel title="TurtleBot3 탐색 제어" className="navigation-control" actions={<span className="nav-live"><i/>자율주행 중</span>}>
