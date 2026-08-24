@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import mapImage from '@/imports/image.png'
+import { mapImageUrl, projectPoseToMap, useRobotMap } from '@/features/robot-map'
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 type Theme = 'light' | 'dark'
@@ -172,6 +172,7 @@ export default function App() {
   const [riskFilter, setRiskFilter] = useState<RiskLevel | 'all'>('all')
   const [sort, setSort] = useState<'latest' | 'risk'>('latest')
   const [alertVisible, setAlertVisible] = useState(true)
+  const { map, robots, loading: mapLoading, error: mapError, backendOnline, reload: reloadMap } = useRobotMap()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -203,6 +204,21 @@ export default function App() {
   const keyActive = (key: string) => activeKeys.has(key) || activeKeys.has(`arrow${key === 'w' ? 'up' : key === 's' ? 'down' : key === 'a' ? 'left' : 'right'}`)
   const highRisk = CRACKS.filter((crack) => crack.risk === 'high' || crack.risk === 'critical').length
   const controlTargetLabel = controlTarget === 'mini' ? '미니로봇' : 'TurtleBot3'
+  const turtlebot = robots.find((robot) => robot.robot_id === 'TB3-01')
+  const equipmentStatus = STATUS.map((item) => {
+    if (item.label === '로봇') return { ...item, detail: turtlebot?.online ? '정상' : '오프라인', tone: turtlebot?.online ? 'ok' : 'warn' }
+    if (item.label === 'TB3 LiDAR') return { ...item, detail: turtlebot?.online ? '정상' : '연결 대기', tone: turtlebot?.online ? 'ok' : 'warn' }
+    if (item.label === 'SLAM') return { ...item, detail: map ? '지도 준비' : '지도 없음', tone: map ? 'ok' : 'warn' }
+    return item
+  })
+  const robotMarkers = useMemo(() => {
+    if (!map) return []
+    return robots.flatMap((robot) => {
+      if (!robot.pose || robot.pose.frame_id !== map.frame_id) return []
+      const point = projectPoseToMap(map, robot.pose)
+      return point.inside ? [{ robot, point }] : []
+    })
+  }, [map, robots])
 
   const changeControlTarget = (target: ControlTarget) => {
     setActiveKeys(new Set())
@@ -215,11 +231,11 @@ export default function App() {
       <header className="topbar">
         <div className="brand"><span className="brand-icon"><Icon name="robot" size={20}/></span><div><h1>지하공간 위험 자동화 점검 시스템</h1><p>AI 기반 로봇 관제 대시보드</p></div><span className="inspection-live"><i/>점검 진행 중</span></div>
         <div className="mission-overview"><span><small>주 로봇</small><b>TurtleBot3 Burger</b></span><span><small>보조 로봇</small><b>미니로봇</b></span><span><small>점검 경과</small><b className="mono">00:28:14</b></span></div>
-        <div className="top-actions"><span className="connection"><i/>정상 연결 <small>· 1초 전</small></span><button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="테마 전환" aria-label="다크 모드 전환"><Icon name={theme === 'light' ? 'moon' : 'sun'}/></button><Button variant="danger" onClick={() => setEmergency(!emergency)}><Icon name="stop" size={13}/>{emergency ? '정지 해제' : '비상 정지'}</Button></div>
+        <div className="top-actions"><span className={`connection ${backendOnline ? '' : 'connection-offline'}`}><i/>{backendOnline ? '백엔드 연결' : '백엔드 연결 안 됨'} <small>· 지도 API</small></span><button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="테마 전환" aria-label="다크 모드 전환"><Icon name={theme === 'light' ? 'moon' : 'sun'}/></button><Button variant="danger" onClick={() => setEmergency(!emergency)}><Icon name="stop" size={13}/>{emergency ? '정지 해제' : '비상 정지'}</Button></div>
       </header>
 
       <div className="statusbar" aria-label="장비 연결 상태">
-        {STATUS.map((item) => <div className={`status-item status-${item.tone}`} key={item.label}><i/><span>{item.label}</span><b>{item.detail}</b></div>)}
+        {equipmentStatus.map((item) => <div className={`status-item status-${item.tone}`} key={item.label}><i/><span>{item.label}</span><b>{item.detail}</b></div>)}
       </div>
 
       {emergency && <div className="emergency-banner"><Icon name="alert" size={16}/><b>비상 정지 활성화</b><span>모든 이동 명령이 차단되었습니다.</span></div>}
@@ -233,15 +249,17 @@ export default function App() {
             <div className="camera-meta"><span><small>해상도</small><b className="mono">640×480</b></span><span><small>FPS</small><b className="mono">30fps</b></span><span><small>영상 지연</small><b className="mono warning-text">320ms</b></span><span><small>마지막 프레임</small><b className="mono">—</b></span></div>
           </Panel>
 
-          <Panel title="TurtleBot3 SLAM 지도" className="map-panel" actions={<><span className="source-chip">LiDAR</span><button className="icon-button compact" onClick={() => setZoom(Math.min(1.5, zoom + .1))} aria-label="지도 확대"><Icon name="plus" size={15}/></button><button className="icon-button compact" onClick={() => setZoom(Math.max(.8, zoom - .1))} aria-label="지도 축소"><Icon name="minus" size={15}/></button></>}>
+          <Panel title="TurtleBot3 SLAM 지도" className="map-panel" actions={<><span className="source-chip">TB3-01 · LiDAR</span><span className={`stream-state ${turtlebot?.online ? 'online' : ''}`}><i/>{turtlebot?.online ? '위치 수신 중' : '저장 지도'}</span><button className="icon-button compact" onClick={() => setZoom(Math.min(1.5, zoom + .1))} aria-label="지도 확대"><Icon name="plus" size={15}/></button><button className="icon-button compact" onClick={() => setZoom(Math.max(.8, zoom - .1))} aria-label="지도 축소"><Icon name="minus" size={15}/></button></>}>
             <div className="map-frame">
-              <div className="map-canvas" style={{ transform: `scale(${zoom})` }}>
-                <img className="slam-map-img" src={mapImage} alt="LiDAR로 생성한 지하공간 SLAM 지도"/>
-                <div className="robot-marker" style={{ left: '50%', top: '52%' }} title="TurtleBot 현재 위치"><span/><i/></div>
-                {CRACKS.map((crack) => <button key={crack.id} className={`crack-marker risk-${crack.risk}`} style={{ left: `${crack.mapX}%`, top: `${crack.mapY}%` }} onClick={() => setSelectedCrack(crack)} aria-label={`${crack.id} 상세 정보 열기`} title={`${crack.id} · 위험도 ${crack.currentRisk}`}/>) }
-              </div>
+              {mapLoading && <div className="map-message"><Icon name="map" size={26}/><b>SLAM 지도 불러오는 중</b></div>}
+              {!mapLoading && mapError && <div className="map-message map-error"><Icon name="alert" size={26}/><b>{mapError}</b><Button onClick={reloadMap}>다시 시도</Button></div>}
+              {!mapLoading && map && <div className={`map-canvas ${map.width >= map.height ? 'map-landscape' : 'map-portrait'}`} style={{ transform: `scale(${zoom})`, aspectRatio: `${map.width} / ${map.height}` }}>
+                <img className="slam-map-img" src={mapImageUrl(map)} alt="LiDAR로 생성한 지하공간 SLAM 지도"/>
+                {robotMarkers.map(({ robot, point }) => <div key={robot.robot_id} className={`robot-marker ${robot.robot_id.startsWith('MINI') ? 'robot-mini' : 'robot-turtlebot'}`} style={{ left: `${point.left}%`, top: `${point.top}%`, transform: `translate(-50%, -50%) rotate(${point.rotation}deg)` }} title={`${robot.robot_id} · X ${robot.pose?.x.toFixed(2)}m / Y ${robot.pose?.y.toFixed(2)}m`}><span/><i/></div>)}
+                {robotMarkers.length === 0 && <span className="pose-waiting">로봇 위치 수신 대기</span>}
+              </div>}
             </div>
-            <div className="map-footer"><div><span><i className="legend robot-legend"/>TurtleBot</span><span><i className="legend crack-legend"/>균열</span><span><i className="legend path-legend"/>이동 경로</span></div><p><span>X <b className="mono">0.30m</b></span><span>Y <b className="mono">1.35m</b></span><span>Yaw <b className="mono">32°</b></span><span>해상도 <b className="mono">0.05m/px</b></span></p></div>
+            <div className="map-footer"><div>{robots.map((robot) => <span key={robot.robot_id}><i className={`legend ${robot.robot_id.startsWith('MINI') ? 'mini-legend' : 'robot-legend'}`}/>{robot.robot_id}</span>)}</div><p><span>X <b className="mono">{turtlebot?.pose ? `${turtlebot.pose.x.toFixed(2)}m` : '—'}</b></span><span>Y <b className="mono">{turtlebot?.pose ? `${turtlebot.pose.y.toFixed(2)}m` : '—'}</b></span><span>Yaw <b className="mono">{turtlebot?.pose ? `${(turtlebot.pose.yaw * 180 / Math.PI).toFixed(0)}°` : '—'}</b></span><span>해상도 <b className="mono">{map ? `${map.resolution.toFixed(2)}m/px` : '—'}</b></span></p></div>
           </Panel>
         </div>
 
