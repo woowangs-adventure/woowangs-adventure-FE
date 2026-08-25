@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useRobotControl, velocityFromKeys } from '@/features/robot-control'
 import { mapImageUrl, projectPoseToMap, useRobotMap } from '@/features/robot-map'
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
@@ -57,6 +58,11 @@ const RISK_LABEL: Record<RiskLevel, string> = {
   medium: '보통',
   high: '높음',
   critical: '심각',
+}
+
+const CONTROL_ROBOT_IDS: Record<ControlTarget, string> = {
+  turtlebot: 'TB3-01',
+  mini: 'MINI-01',
 }
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -163,7 +169,7 @@ export default function App() {
   })
   const [emergency, setEmergency] = useState(false)
   const [controlActive, setControlActive] = useState(false)
-  const [controlTarget, setControlTarget] = useState<ControlTarget>('mini')
+  const [controlTarget, setControlTarget] = useState<ControlTarget>('turtlebot')
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set())
   const [speed, setSpeed] = useState(50)
   const [zoom, setZoom] = useState(1)
@@ -173,6 +179,17 @@ export default function App() {
   const [sort, setSort] = useState<'latest' | 'risk'>('latest')
   const [alertVisible, setAlertVisible] = useState(true)
   const { map, robots, loading: mapLoading, error: mapError, backendOnline, reload: reloadMap } = useRobotMap()
+  const turtlebot = robots.find((robot) => robot.robot_id === 'TB3-01')
+  const controlRobotId = CONTROL_ROBOT_IDS[controlTarget]
+  const controlRobot = robots.find((robot) => robot.robot_id === controlRobotId)
+  const robotControl = useRobotControl({
+    robotId: controlRobotId,
+    enabled: controlActive && !emergency,
+    robotOnline: controlRobot?.online ?? false,
+    speedPercent: speed,
+    activeKeys,
+  })
+  const currentVelocity = velocityFromKeys(activeKeys, speed)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -196,6 +213,12 @@ export default function App() {
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp) }
   }, [handleKeyDown, handleKeyUp])
 
+  useEffect(() => {
+    const clearKeys = () => setActiveKeys(new Set())
+    window.addEventListener('blur', clearKeys)
+    return () => window.removeEventListener('blur', clearKeys)
+  }, [])
+
   const visibleCracks = useMemo(() => {
     const filtered = CRACKS.filter((crack) => (riskFilter === 'all' || crack.risk === riskFilter) && crack.id.toLowerCase().includes(search.toLowerCase()))
     return [...filtered].sort((a, b) => sort === 'risk' ? b.currentRisk - a.currentRisk : b.detectedAt.localeCompare(a.detectedAt))
@@ -204,17 +227,24 @@ export default function App() {
   const keyActive = (key: string) => activeKeys.has(key) || activeKeys.has(`arrow${key === 'w' ? 'up' : key === 's' ? 'down' : key === 'a' ? 'left' : 'right'}`)
   const highRisk = CRACKS.filter((crack) => crack.risk === 'high' || crack.risk === 'critical').length
   const controlTargetLabel = controlTarget === 'mini' ? '미니로봇' : 'TurtleBot3'
-  const turtlebot = robots.find((robot) => robot.robot_id === 'TB3-01')
   const equipmentStatus = STATUS.map((item) => {
     if (item.label === '로봇') return { ...item, detail: turtlebot?.online ? '정상' : '오프라인', tone: turtlebot?.online ? 'ok' : 'warn' }
     if (item.label === 'TB3 LiDAR') return { ...item, detail: turtlebot?.online ? '정상' : '연결 대기', tone: turtlebot?.online ? 'ok' : 'warn' }
-    if (item.label === 'SLAM') return { ...item, detail: map ? '지도 준비' : '지도 없음', tone: map ? 'ok' : 'warn' }
+    if (item.label === 'SLAM') {
+      const localized = turtlebot?.status.localization_available === true
+      return { ...item, detail: localized ? 'AMCL 위치 확인' : map ? '지도만 준비' : '지도 없음', tone: localized ? 'ok' : 'warn' }
+    }
     return item
   })
   const robotMarkers = useMemo(() => {
     if (!map) return []
     return robots.flatMap((robot) => {
-      if (!robot.pose || robot.pose.frame_id !== map.frame_id) return []
+      if (
+        !robot.pose
+        || robot.pose.frame_id !== map.frame_id
+        || robot.status.localization_available !== true
+        || robot.pose.map_version !== map.version
+      ) return []
       const point = projectPoseToMap(map, robot.pose)
       return point.inside ? [{ robot, point }] : []
     })
@@ -226,12 +256,30 @@ export default function App() {
     setControlTarget(target)
   }
 
+  const toggleControl = () => {
+    setActiveKeys(new Set())
+    setControlActive((active) => !active)
+  }
+
+  const toggleEmergency = () => {
+    setActiveKeys(new Set())
+    setControlActive(false)
+    setEmergency((active) => !active)
+  }
+
+  const controlCommand = currentVelocity.stop
+    ? '즉시 정지'
+    : currentVelocity.linear > 0 ? '전진'
+      : currentVelocity.linear < 0 ? '후진'
+        : currentVelocity.angular > 0 ? '좌회전'
+        : currentVelocity.angular < 0 ? '우회전' : '정지'
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand"><span className="brand-icon"><Icon name="robot" size={20}/></span><div><h1>지하공간 위험 자동화 점검 시스템</h1><p>AI 기반 로봇 관제 대시보드</p></div><span className="inspection-live"><i/>점검 진행 중</span></div>
         <div className="mission-overview"><span><small>주 로봇</small><b>TurtleBot3 Burger</b></span><span><small>보조 로봇</small><b>미니로봇</b></span><span><small>점검 경과</small><b className="mono">00:28:14</b></span></div>
-        <div className="top-actions"><span className={`connection ${backendOnline ? '' : 'connection-offline'}`}><i/>{backendOnline ? '백엔드 연결' : '백엔드 연결 안 됨'} <small>· 지도 API</small></span><button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="테마 전환" aria-label="다크 모드 전환"><Icon name={theme === 'light' ? 'moon' : 'sun'}/></button><Button variant="danger" onClick={() => setEmergency(!emergency)}><Icon name="stop" size={13}/>{emergency ? '정지 해제' : '비상 정지'}</Button></div>
+        <div className="top-actions"><span className={`connection ${backendOnline ? '' : 'connection-offline'}`}><i/>{backendOnline ? '백엔드 연결' : '백엔드 연결 안 됨'} <small>· 지도 API</small></span><button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="테마 전환" aria-label="다크 모드 전환"><Icon name={theme === 'light' ? 'moon' : 'sun'}/></button><Button variant="danger" onClick={toggleEmergency}><Icon name="stop" size={13}/>{emergency ? '정지 해제' : '비상 정지'}</Button></div>
       </header>
 
       <div className="statusbar" aria-label="장비 연결 상태">
@@ -265,9 +313,9 @@ export default function App() {
 
         <div className="operations-grid">
           <div className="control-stack">
-            <Panel title="로봇 수동 조작" className="mini-control" actions={<button className={`control-toggle ${controlActive ? 'active' : ''}`} disabled={emergency} onClick={() => setControlActive(!controlActive)}><i/>{controlActive ? `${controlTargetLabel} 조종 중` : '조종 활성화'}</button>}>
+            <Panel title="로봇 수동 조작" className="mini-control" actions={<button className={`control-toggle ${robotControl.state === 'ready' ? 'active' : ''}`} disabled={emergency || !controlRobot?.online || !robotControl.serverEnabled} onClick={toggleControl}><i/>{robotControl.state === 'ready' ? `${controlTargetLabel} 조종 중` : controlActive ? '연결 중' : '조종 활성화'}</button>}>
               <div className="robot-selector" aria-label="키보드 제어 대상">
-                <button className={controlTarget === 'mini' ? 'active' : ''} onClick={() => changeControlTarget('mini')}><Icon name="camera" size={12}/><span>미니로봇</span><small>카메라</small></button>
+                <button className={controlTarget === 'mini' ? 'active' : ''} disabled={!robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online)} onClick={() => changeControlTarget('mini')} title="미니로봇 Edge 연동 후 활성화됩니다."><Icon name="camera" size={12}/><span>미니로봇</span><small>연동 예정</small></button>
                 <button className={controlTarget === 'turtlebot' ? 'active' : ''} onClick={() => changeControlTarget('turtlebot')}><Icon name="map" size={12}/><span>TurtleBot3</span><small>LiDAR · SLAM</small></button>
               </div>
               <div className="drive-row">
@@ -275,7 +323,8 @@ export default function App() {
                 <div className="drive-info"><p><span>W / ↑</span> 전진 · <span>S / ↓</span> 후진</p><p><span>A / ←</span> 좌회전 · <span>D / →</span> 우회전</p><p><span>Space</span> 즉시 정지</p></div>
               </div>
               <div className="speed-row"><label htmlFor="speed">속도 <b>{speed}%</b></label><input id="speed" type="range" min="0" max="100" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}/></div>
-              <div className="telemetry"><span>대상 <b>{controlTargetLabel}</b></span><span>명령 <b>정지</b></span><span>속도 <b>{speed}%</b></span><span>지연 <b>84ms</b></span></div>
+              {robotControl.error && <p className="control-error">{robotControl.error}</p>}
+              <div className="telemetry"><span>대상 <b>{controlTargetLabel}</b></span><span>명령 <b>{controlCommand}</b></span><span>속도 <b>{speed}%</b></span><span>지연 <b>{robotControl.latencyMs === null ? '—' : `${robotControl.latencyMs}ms`}</b></span></div>
             </Panel>
 
             <Panel title="TurtleBot3 탐색 제어" className="navigation-control" actions={<span className="nav-live"><i/>자율주행 중</span>}>
