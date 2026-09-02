@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { useRobotControl, velocityFromKeys } from '@/features/robot-control'
 import { mapImageUrl, projectPoseToMap, useRobotMap } from '@/features/robot-map'
+import { cameraRobotId, recordedVideoUrl, useRobotCamera } from '@/features/robot-camera'
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 type Theme = 'light' | 'dark'
@@ -178,7 +179,11 @@ export default function App() {
   const [riskFilter, setRiskFilter] = useState<RiskLevel | 'all'>('all')
   const [sort, setSort] = useState<'latest' | 'risk'>('latest')
   const [alertVisible, setAlertVisible] = useState(true)
+  const [cameraDimensions, setCameraDimensions] = useState('—')
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraFrameRef = useRef<HTMLDivElement>(null)
   const { map, robots, loading: mapLoading, error: mapError, backendOnline, reload: reloadMap } = useRobotMap()
+  const camera = useRobotCamera(cameraRobotId)
   const turtlebot = robots.find((robot) => robot.robot_id === 'TB3-01')
   const controlRobotId = CONTROL_ROBOT_IDS[controlTarget]
   const controlRobot = robots.find((robot) => robot.robot_id === controlRobotId)
@@ -195,6 +200,12 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('dashboard-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    if (cameraVideoRef.current && camera.source === 'live') {
+      cameraVideoRef.current.srcObject = camera.liveStream
+    }
+  }, [camera.liveStream, camera.source])
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     const key = event.key.toLowerCase()
@@ -233,6 +244,20 @@ export default function App() {
     if (item.label === 'SLAM') {
       const localized = turtlebot?.status.localization_available === true
       return { ...item, detail: localized ? 'AMCL 위치 확인' : map ? '지도만 준비' : '지도 없음', tone: localized ? 'ok' : 'warn' }
+    }
+    if (item.label === '미니 영상') {
+      return {
+        ...item,
+        detail: camera.source === 'live' ? '실시간 연결' : camera.source === 'recorded' ? '저장 영상' : '연결 대기',
+        tone: camera.source === 'live' ? 'ok' : 'warn',
+      }
+    }
+    if (item.label === '미니 카메라') {
+      return {
+        ...item,
+        detail: camera.source === 'live' ? '정상' : camera.source === 'recorded' ? '오프라인 재생' : '연결 대기',
+        tone: camera.source === 'live' ? 'ok' : 'warn',
+      }
     }
     return item
   })
@@ -274,6 +299,25 @@ export default function App() {
         : currentVelocity.angular > 0 ? '좌회전'
         : currentVelocity.angular < 0 ? '우회전' : '정지'
 
+  const cameraStateLabel = camera.source === 'live'
+    ? '실시간'
+    : camera.source === 'recorded' ? '저장 영상' : camera.signalingConnected ? '송신 대기' : '연결 대기'
+  const cameraLastFrame = camera.source === 'live'
+    ? '방금'
+    : camera.recordedVideo ? new Date(camera.recordedVideo.uploaded_at).toLocaleString('ko-KR') : '—'
+  const captureSnapshot = () => {
+    const video = cameraVideoRef.current
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL('image/png')
+    link.download = `${cameraRobotId}-${new Date().toISOString()}.png`
+    link.click()
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -292,9 +336,18 @@ export default function App() {
 
       <main className="dashboard">
         <div className="monitor-grid">
-          <Panel title="미니로봇 실시간 카메라" className="camera-panel" actions={<><span className="source-chip">MINI-01</span><span className="stream-state"><i/>연결 대기</span><Button className="desktop-only"><Icon name="download" size={14}/>스냅샷</Button><Button className="desktop-only"><Icon name="expand" size={14}/>전체 화면</Button></>}>
-            <div className="camera-frame"><div className="camera-empty"><span><Icon name="camera" size={30}/></span><b>실시간 영상 영역</b><p>WebRTC 영상 연결 후 실시간 화면이 표시됩니다.</p></div><small>16:9 영상 영역</small></div>
-            <div className="camera-meta"><span><small>해상도</small><b className="mono">640×480</b></span><span><small>FPS</small><b className="mono">30fps</b></span><span><small>영상 지연</small><b className="mono warning-text">320ms</b></span><span><small>마지막 프레임</small><b className="mono">—</b></span></div>
+          <Panel title="미니로봇 카메라" className="camera-panel" actions={<><span className="source-chip">{cameraRobotId}</span><span className={`stream-state ${camera.source !== 'empty' ? 'online' : ''}`}><i/>{cameraStateLabel}</span><Button className="desktop-only" onClick={captureSnapshot} disabled={camera.source === 'empty'}><Icon name="download" size={14}/>스냅샷</Button><Button className="desktop-only" onClick={() => void cameraFrameRef.current?.requestFullscreen()} disabled={camera.source === 'empty'}><Icon name="expand" size={14}/>전체 화면</Button></>}>
+            <div className="camera-frame" ref={cameraFrameRef}>
+              {camera.source === 'live' && (
+                <video ref={cameraVideoRef} className="camera-video" autoPlay playsInline muted onLoadedMetadata={(event) => setCameraDimensions(`${event.currentTarget.videoWidth}×${event.currentTarget.videoHeight}`)}/>
+              )}
+              {camera.source === 'recorded' && camera.recordedVideo && (
+                <video key={camera.recordedVideo.version} ref={cameraVideoRef} className="camera-video" src={recordedVideoUrl(camera.recordedVideo)} autoPlay playsInline muted loop controls onLoadedMetadata={(event) => setCameraDimensions(`${event.currentTarget.videoWidth}×${event.currentTarget.videoHeight}`)}/>
+              )}
+              {camera.source === 'empty' && <div className="camera-empty"><span><Icon name="camera" size={30}/></span><b>카메라 영상 대기 중</b><p>{camera.error ?? '저장 영상을 업로드하거나 WebRTC 송신기를 연결해 주세요.'}</p><button type="button" onClick={camera.reload}>다시 확인</button></div>}
+              <small>{camera.source === 'live' ? 'WebRTC 실시간 영상' : camera.source === 'recorded' ? '백엔드 저장 영상' : '16:9 영상 영역'}</small>
+            </div>
+            <div className="camera-meta"><span><small>해상도</small><b className="mono">{cameraDimensions}</b></span><span><small>재생 방식</small><b className="mono">{camera.source === 'live' ? 'WebRTC' : camera.source === 'recorded' ? 'MP4 / WebM' : '—'}</b></span><span><small>전송 경로</small><b className="mono">{camera.source === 'live' ? 'P2P' : camera.source === 'recorded' ? 'Backend' : '—'}</b></span><span><small>마지막 영상</small><b className="mono">{cameraLastFrame}</b></span></div>
           </Panel>
 
           <Panel title="TurtleBot3 SLAM 지도" className="map-panel" actions={<><span className="source-chip">TB3-01 · LiDAR</span><span className={`stream-state ${turtlebot?.online ? 'online' : ''}`}><i/>{turtlebot?.online ? '위치 수신 중' : '저장 지도'}</span><button className="icon-button compact" onClick={() => setZoom(Math.min(1.5, zoom + .1))} aria-label="지도 확대"><Icon name="plus" size={15}/></button><button className="icon-button compact" onClick={() => setZoom(Math.max(.8, zoom - .1))} aria-label="지도 축소"><Icon name="minus" size={15}/></button></>}>
