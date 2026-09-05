@@ -154,6 +154,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .robot-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px; }
 .robot-selector button { min-width: 0; height: 27px; padding: 0 7px; display: grid; grid-template-columns: auto auto 1fr; align-items: center; justify-content: start; gap: 5px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-soft); background: var(--surface-subtle); cursor: pointer; }
 .robot-selector button.active { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 55%, var(--border)); background: var(--blue-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 12%, transparent); }
+.robot-selector button:disabled { opacity: .42; cursor: not-allowed; }
 .robot-selector span { font-size: 9px; font-weight: 800; white-space: nowrap; }
 .robot-selector small { overflow: hidden; color: var(--text-muted); font-size: 8px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .drive-row { display: flex; align-items: center; justify-content: center; gap: 22px; }
@@ -167,6 +168,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .speed-row { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; margin: 6px 0; }
 .speed-row label { color: var(--text-muted); font-size: 9px; }.speed-row label b { color: var(--blue); }
 .speed-row input { width: 100%; height: 4px; accent-color: var(--blue); }
+.control-error { margin: 4px 0; color: var(--red); font-size: 8px; line-height: 1.35; }
 .telemetry, .nav-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .telemetry span, .nav-stats span { padding: 4px 6px; display: flex; justify-content: space-between; gap: 4px; border: 1px solid var(--border-soft); border-radius: 5px; color: var(--text-muted); background: var(--surface-subtle); font-size: 8px; }
 .telemetry b, .nav-stats b { color: var(--text); font-size: 8px; white-space: nowrap; }

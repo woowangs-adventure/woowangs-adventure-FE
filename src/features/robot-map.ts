@@ -5,7 +5,19 @@ export interface Pose2D {
   y: number
   yaw: number
   frame_id: string
+  map_version: string | null
   timestamp: string
+}
+
+export interface RobotStatus {
+  ros_connected?: boolean
+  map_available?: boolean
+  tf_available?: boolean
+  localization_available?: boolean
+  localization_method?: 'amcl' | 'slam_toolbox' | 'unknown' | 'none'
+  map_version?: string | null
+  control_available?: boolean
+  [key: string]: unknown
 }
 
 export interface MapState {
@@ -27,7 +39,7 @@ export interface RobotState {
   last_seen: string | null
   pose: Pose2D | null
   map: MapState | null
-  status: Record<string, unknown>
+  status: RobotStatus
 }
 
 interface DashboardEvent {
@@ -51,11 +63,11 @@ export const configuredRobotIds = (import.meta.env.VITE_ROBOT_IDS || 'TB3-01')
   .map((robotId: string) => robotId.trim())
   .filter(Boolean)
 
-function apiUrl(path: string): string {
+export function apiUrl(path: string): string {
   return `${apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`
 }
 
-function dashboardUrl(robotId: string): string {
+export function dashboardUrl(robotId: string): string {
   const url = new URL(apiBaseUrl)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.pathname = `/ws/dashboard/${encodeURIComponent(robotId)}`
@@ -183,7 +195,7 @@ export function useRobotMap() {
         } else if (event.type === 'robot.pose') {
           updateRobot(robotId, { pose: event.data as Pose2D })
         } else if (event.type === 'robot.status') {
-          updateRobot(robotId, { status: event.data as Record<string, unknown> })
+          updateRobot(robotId, { status: event.data as RobotStatus })
         }
       }
       socket.onclose = () => {
