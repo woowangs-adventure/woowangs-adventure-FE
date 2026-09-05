@@ -190,7 +190,7 @@ export default function App() {
   const robotControl = useRobotControl({
     robotId: controlRobotId,
     enabled: controlActive && !emergency,
-    robotOnline: controlRobot?.online ?? false,
+    robotOnline: Boolean(controlRobot?.online && controlRobot.status.control_available !== false),
     speedPercent: speed,
     activeKeys,
   })
@@ -208,6 +208,8 @@ export default function App() {
   }, [camera.liveStream, camera.source])
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
     const key = event.key.toLowerCase()
     if (!controlActive || emergency || !['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) return
     event.preventDefault()
@@ -239,7 +241,11 @@ export default function App() {
   const highRisk = CRACKS.filter((crack) => crack.risk === 'high' || crack.risk === 'critical').length
   const controlTargetLabel = controlTarget === 'mini' ? '미니로봇' : 'TurtleBot3'
   const equipmentStatus = STATUS.map((item) => {
-    if (item.label === '로봇') return { ...item, detail: turtlebot?.online ? '정상' : '오프라인', tone: turtlebot?.online ? 'ok' : 'warn' }
+    if (item.label === '로봇') return { ...item, detail: robots.some((robot) => robot.online) ? '연결됨' : '오프라인', tone: robots.some((robot) => robot.online) ? 'ok' : 'warn' }
+    if (item.label === '미니로봇') {
+      const online = robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online)
+      return { ...item, detail: online ? '연결됨' : '오프라인', tone: online ? 'ok' : 'warn' }
+    }
     if (item.label === 'TB3 LiDAR') return { ...item, detail: turtlebot?.online ? '정상' : '연결 대기', tone: turtlebot?.online ? 'ok' : 'warn' }
     if (item.label === 'SLAM') {
       const localized = turtlebot?.status.localization_available === true
@@ -368,7 +374,7 @@ export default function App() {
           <div className="control-stack">
             <Panel title="로봇 수동 조작" className="mini-control" actions={<button className={`control-toggle ${robotControl.state === 'ready' ? 'active' : ''}`} disabled={emergency || !controlRobot?.online || !robotControl.serverEnabled} onClick={toggleControl}><i/>{robotControl.state === 'ready' ? `${controlTargetLabel} 조종 중` : controlActive ? '연결 중' : '조종 활성화'}</button>}>
               <div className="robot-selector" aria-label="키보드 제어 대상">
-                <button className={controlTarget === 'mini' ? 'active' : ''} disabled={!robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online)} onClick={() => changeControlTarget('mini')} title="미니로봇 Edge 연동 후 활성화됩니다."><Icon name="camera" size={12}/><span>미니로봇</span><small>연동 예정</small></button>
+                <button className={controlTarget === 'mini' ? 'active' : ''} disabled={!robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online)} onClick={() => changeControlTarget('mini')} title="미니로봇 키보드 조작"><Icon name="camera" size={12}/><span>미니로봇</span><small>{robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online) ? '연결됨' : '오프라인'}</small></button>
                 <button className={controlTarget === 'turtlebot' ? 'active' : ''} onClick={() => changeControlTarget('turtlebot')}><Icon name="map" size={12}/><span>TurtleBot3</span><small>LiDAR · SLAM</small></button>
               </div>
               <div className="drive-row">
@@ -376,6 +382,7 @@ export default function App() {
                 <div className="drive-info"><p><span>W / ↑</span> 전진 · <span>S / ↓</span> 후진</p><p><span>A / ←</span> 좌회전 · <span>D / →</span> 우회전</p><p><span>Space</span> 즉시 정지</p></div>
               </div>
               <div className="speed-row"><label htmlFor="speed">속도 <b>{speed}%</b></label><input id="speed" type="range" min="0" max="100" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}/></div>
+              {controlTarget === 'mini' && <div className="headlight-row"><span>전조등 <b>{controlRobot?.online && typeof controlRobot.status.headlight_on === 'boolean' ? (controlRobot.status.headlight_on ? '켜짐' : '꺼짐') : '상태 대기'}</b></span><Button disabled={robotControl.state !== 'ready' || !controlRobot?.status.headlight_available} onClick={() => robotControl.setHeadlight(true)}>켜기</Button><Button disabled={robotControl.state !== 'ready' || !controlRobot?.status.headlight_available} onClick={() => robotControl.setHeadlight(false)}>끄기</Button></div>}
               {robotControl.error && <p className="control-error">{robotControl.error}</p>}
               <div className="telemetry"><span>대상 <b>{controlTargetLabel}</b></span><span>명령 <b>{controlCommand}</b></span><span>속도 <b>{speed}%</b></span><span>지연 <b>{robotControl.latencyMs === null ? '—' : `${robotControl.latencyMs}ms`}</b></span></div>
             </Panel>

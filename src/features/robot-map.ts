@@ -17,6 +17,8 @@ export interface RobotStatus {
   localization_method?: 'amcl' | 'slam_toolbox' | 'unknown' | 'none'
   map_version?: string | null
   control_available?: boolean
+  headlight_available?: boolean
+  headlight_on?: boolean
   [key: string]: unknown
 }
 
@@ -58,10 +60,9 @@ export interface MapPoint {
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000')
   .replace(/\/$/, '')
 
-export const configuredRobotIds = (import.meta.env.VITE_ROBOT_IDS || 'TB3-01')
-  .split(',')
-  .map((robotId: string) => robotId.trim())
-  .filter(Boolean)
+export const configuredRobotIds = [...new Set(['TB3-01', 'MINI-01',
+  ...(import.meta.env.VITE_ROBOT_IDS || '').split(',').map((id: string) => id.trim()).filter(Boolean),
+])]
 
 export function apiUrl(path: string): string {
   return `${apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`
@@ -156,7 +157,6 @@ export function useRobotMap() {
         setBackendOnline(true)
       } catch (reason) {
         if (!active) return
-        setBackendOnline(false)
         setError(reason instanceof Error ? reason.message : '지도 정보를 불러오지 못했습니다.')
       } finally {
         if (active) setLoading(false)
@@ -200,6 +200,8 @@ export function useRobotMap() {
       }
       socket.onclose = () => {
         sockets.delete(robotId)
+        if (!disposed && sockets.size === 0) setBackendOnline(false)
+        updateRobot(robotId, { online: false })
         if (!disposed) {
           reconnectTimers.set(robotId, window.setTimeout(() => connect(robotId), 2000))
         }
