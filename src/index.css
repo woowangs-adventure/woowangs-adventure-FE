@@ -248,3 +248,7 @@ tbody tr { cursor: pointer; transition: background .12s; } tbody tr:hover { back
   .log-kpis span:nth-child(3) { display: none; }.log-tools { grid-template-columns: 1fr 100px; }.segmented { grid-column: 1 / -1; }.table-wrap { max-height: 360px; }
   .risk-toast { top: 106px; right: 8px; }.detail-drawer { width: 100vw; }.drawer-scroll { padding-inline: 14px; }
 }
+
+.headlight-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.headlight-row > span { flex: 1; font-size: 12px; white-space: nowrap; }
+.headlight-row > button { flex: 0 0 auto; min-width: 52px; }
