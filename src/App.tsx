@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { controlKey } from '@/features/robot-keyboard'
 import { useRobotControl, velocityFromKeys } from '@/features/robot-control'
 import { mapImageUrl, projectPoseToMap, useRobotMap } from '@/features/robot-map'
 import { cameraRobotId, recordedVideoUrl, useRobotCamera } from '@/features/robot-camera'
@@ -45,13 +46,13 @@ const CRACKS: Crack[] = [
 ]
 
 const STATUS = [
-  { label: '로봇', detail: '정상', tone: 'ok' },
-  { label: '미니 영상', detail: '지연 320ms', tone: 'warn' },
-  { label: '미니 카메라', detail: '정상', tone: 'ok' },
-  { label: 'TB3 LiDAR', detail: '정상', tone: 'ok' },
+  { label: '터틀봇', detail: '정상', tone: 'ok' },
+  { label: '미니로봇', detail: '정상', tone: 'ok' },
+  { label: '미니로봇 카메라', detail: '정상', tone: 'ok' },
+  { label: '영상', detail: '지연 320ms', tone: 'warn' },
+  { label: '터틀봇 LiDAR', detail: '정상', tone: 'ok' },
   { label: 'SLAM', detail: '정상', tone: 'ok' },
   { label: 'YOLO 탐지', detail: '지연 84ms', tone: 'ok' },
-  { label: '미니로봇', detail: '정상', tone: 'ok' },
 ]
 
 const RISK_LABEL: Record<RiskLevel, string> = {
@@ -210,14 +211,16 @@ export default function App() {
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
-    const key = event.key.toLowerCase()
-    if (!controlActive || emergency || !['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) return
+    const key = controlKey(event)
+    if (!controlActive || emergency || key === null) return
     event.preventDefault()
     setActiveKeys((previous) => new Set(previous).add(key))
   }, [controlActive, emergency])
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
-    setActiveKeys((previous) => { const next = new Set(previous); next.delete(event.key.toLowerCase()); return next })
+    const key = controlKey(event)
+    if (key === null) return
+    setActiveKeys((previous) => { const next = new Set(previous); next.delete(key); return next })
   }, [])
 
   useEffect(() => {
@@ -241,24 +244,24 @@ export default function App() {
   const highRisk = CRACKS.filter((crack) => crack.risk === 'high' || crack.risk === 'critical').length
   const controlTargetLabel = controlTarget === 'mini' ? '미니로봇' : 'TurtleBot3'
   const equipmentStatus = STATUS.map((item) => {
-    if (item.label === '로봇') return { ...item, detail: robots.some((robot) => robot.online) ? '연결됨' : '오프라인', tone: robots.some((robot) => robot.online) ? 'ok' : 'warn' }
+    if (item.label === '터틀봇') return { ...item, detail: turtlebot?.online ? '연결됨' : '오프라인', tone: turtlebot?.online ? 'ok' : 'warn' }
     if (item.label === '미니로봇') {
       const online = robots.some((robot) => robot.robot_id === 'MINI-01' && robot.online)
       return { ...item, detail: online ? '연결됨' : '오프라인', tone: online ? 'ok' : 'warn' }
     }
-    if (item.label === 'TB3 LiDAR') return { ...item, detail: turtlebot?.online ? '정상' : '연결 대기', tone: turtlebot?.online ? 'ok' : 'warn' }
+    if (item.label === '터틀봇 LiDAR') return { ...item, detail: turtlebot?.online ? '정상' : '연결 대기', tone: turtlebot?.online ? 'ok' : 'warn' }
     if (item.label === 'SLAM') {
       const localized = turtlebot?.status.localization_available === true
       return { ...item, detail: localized ? 'AMCL 위치 확인' : map ? '지도만 준비' : '지도 없음', tone: localized ? 'ok' : 'warn' }
     }
-    if (item.label === '미니 영상') {
+    if (item.label === '영상') {
       return {
         ...item,
         detail: camera.source === 'live' ? '실시간 연결' : camera.source === 'recorded' ? '저장 영상' : '연결 대기',
         tone: camera.source === 'live' ? 'ok' : 'warn',
       }
     }
-    if (item.label === '미니 카메라') {
+    if (item.label === '미니로봇 카메라') {
       return {
         ...item,
         detail: camera.source === 'live' ? '정상' : camera.source === 'recorded' ? '오프라인 재생' : '연결 대기',
