@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 export interface Pose2D {
   x: number
@@ -14,7 +14,7 @@ export interface RobotStatus {
   map_available?: boolean
   tf_available?: boolean
   localization_available?: boolean
-  localization_method?: 'amcl' | 'slam_toolbox' | 'unknown' | 'none'
+  localization_method?: "amcl" | "slam_toolbox" | "unknown" | "none"
   map_version?: string | null
   control_available?: boolean
   headlight_available?: boolean
@@ -57,29 +57,41 @@ export interface MapPoint {
   inside: boolean
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000')
-  .replace(/\/$/, '')
+const apiBaseUrl = (
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "")
 
-export const configuredRobotIds = [...new Set(['TB3-01', 'MINI-01',
-  ...(import.meta.env.VITE_ROBOT_IDS || '').split(',').map((id: string) => id.trim()).filter(Boolean),
-])]
+export const configuredRobotIds = [
+  ...new Set([
+    "TB3-01",
+    "MINI-01",
+    ...(import.meta.env.VITE_ROBOT_IDS || "")
+      .split(",")
+      .map((id: string) => id.trim())
+      .filter(Boolean),
+  ]),
+]
 
 export function apiUrl(path: string): string {
-  return `${apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  return `${apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`
 }
 
 export function dashboardUrl(robotId: string): string {
   const url = new URL(apiBaseUrl)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
   url.pathname = `/ws/dashboard/${encodeURIComponent(robotId)}`
-  url.search = ''
+  url.search = ""
   return url.toString()
 }
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(apiUrl(path))
   if (!response.ok) {
-    throw new Error(response.status === 404 ? '저장된 SLAM 지도가 없습니다.' : '백엔드에 연결할 수 없습니다.')
+    throw new Error(
+      response.status === 404
+        ? "저장된 SLAM 지도가 없습니다."
+        : "백엔드에 연결할 수 없습니다.",
+    )
   }
   return response.json() as Promise<T>
 }
@@ -115,26 +127,41 @@ export function projectPoseToMap(map: MapState, pose: Pose2D): MapPoint {
     left: (pixelX / widthScale) * 100,
     top: (pixelY / heightScale) * 100,
     rotation: 90 - ((pose.yaw - map.origin_yaw) * 180) / Math.PI,
-    inside: pixelX >= 0 && pixelX <= widthScale && pixelY >= 0 && pixelY <= heightScale,
+    inside:
+      pixelX >= 0 &&
+      pixelX <= widthScale &&
+      pixelY >= 0 &&
+      pixelY <= heightScale,
   }
 }
 
 export function useRobotMap() {
   const [map, setMap] = useState<MapState | null>(null)
   const [robotsById, setRobotsById] = useState<Record<string, RobotState>>(() =>
-    Object.fromEntries(configuredRobotIds.map((robotId: string) => [robotId, emptyRobotState(robotId)])),
+    Object.fromEntries(
+      configuredRobotIds.map((robotId: string) => [
+        robotId,
+        emptyRobotState(robotId),
+      ]),
+    ),
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [backendOnline, setBackendOnline] = useState(false)
   const [reloadCount, setReloadCount] = useState(0)
 
-  const updateRobot = useCallback((robotId: string, update: Partial<RobotState>) => {
-    setRobotsById((previous) => ({
-      ...previous,
-      [robotId]: { ...(previous[robotId] ?? emptyRobotState(robotId)), ...update },
-    }))
-  }, [])
+  const updateRobot = useCallback(
+    (robotId: string, update: Partial<RobotState>) => {
+      setRobotsById((previous) => ({
+        ...previous,
+        [robotId]: {
+          ...(previous[robotId] ?? emptyRobotState(robotId)),
+          ...update,
+        },
+      }))
+    },
+    [],
+  )
 
   useEffect(() => {
     let active = true
@@ -143,28 +170,40 @@ export function useRobotMap() {
 
     const load = async () => {
       try {
-        const currentMap = await getJson<MapState>('/api/v1/maps/current')
-        const states = await Promise.all(configuredRobotIds.map(async (robotId: string) => {
-          try {
-            return await getJson<RobotState>(`/api/v1/robots/${encodeURIComponent(robotId)}/state`)
-          } catch {
-            return emptyRobotState(robotId)
-          }
-        }))
+        const currentMap = await getJson<MapState>("/api/v1/maps/current")
+        const states = await Promise.all(
+          configuredRobotIds.map(async (robotId: string) => {
+            try {
+              return await getJson<RobotState>(
+                `/api/v1/robots/${encodeURIComponent(robotId)}/state`,
+              )
+            } catch {
+              return emptyRobotState(robotId)
+            }
+          }),
+        )
         if (!active) return
         setMap(currentMap)
-        setRobotsById(Object.fromEntries(states.map((state) => [state.robot_id, state])))
+        setRobotsById(
+          Object.fromEntries(states.map((state) => [state.robot_id, state])),
+        )
         setBackendOnline(true)
       } catch (reason) {
         if (!active) return
-        setError(reason instanceof Error ? reason.message : '지도 정보를 불러오지 못했습니다.')
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "지도 정보를 불러오지 못했습니다.",
+        )
       } finally {
         if (active) setLoading(false)
       }
     }
 
     void load()
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [reloadCount])
 
   useEffect(() => {
@@ -179,22 +218,31 @@ export function useRobotMap() {
 
       socket.onopen = () => {
         setBackendOnline(true)
-        setError((current) => current === '백엔드에 연결할 수 없습니다.' ? null : current)
+        setError((current) =>
+          current === "백엔드에 연결할 수 없습니다." ? null : current,
+        )
       }
       socket.onmessage = (message) => {
         const event = JSON.parse(message.data) as DashboardEvent
-        if (event.type === 'state.snapshot') {
+        if (event.type === "state.snapshot") {
           const state = event.data as RobotState
           updateRobot(robotId, state)
-          if (state.map) {
+          if (state.map && robotId === "TB3-01") {
             setMap(state.map)
             setError(null)
           }
-        } else if (event.type === 'robot.connection') {
+        } else if (event.type === "map.updated") {
+          const nextMap = event.data as MapState
+          updateRobot(robotId, { map: nextMap })
+          if (robotId === "TB3-01") {
+            setMap(nextMap)
+            setError(null)
+          }
+        } else if (event.type === "robot.connection") {
           updateRobot(robotId, event.data as Partial<RobotState>)
-        } else if (event.type === 'robot.pose') {
+        } else if (event.type === "robot.pose") {
           updateRobot(robotId, { pose: event.data as Pose2D })
-        } else if (event.type === 'robot.status') {
+        } else if (event.type === "robot.status") {
           updateRobot(robotId, { status: event.data as RobotStatus })
         }
       }
@@ -203,7 +251,10 @@ export function useRobotMap() {
         if (!disposed && sockets.size === 0) setBackendOnline(false)
         updateRobot(robotId, { online: false })
         if (!disposed) {
-          reconnectTimers.set(robotId, window.setTimeout(() => connect(robotId), 2000))
+          reconnectTimers.set(
+            robotId,
+            window.setTimeout(() => connect(robotId), 2000),
+          )
         }
       }
     }
@@ -217,7 +268,10 @@ export function useRobotMap() {
   }, [updateRobot])
 
   const robots = useMemo(
-    () => configuredRobotIds.map((robotId: string) => robotsById[robotId] ?? emptyRobotState(robotId)),
+    () =>
+      configuredRobotIds.map(
+        (robotId: string) => robotsById[robotId] ?? emptyRobotState(robotId),
+      ),
     [robotsById],
   )
 
